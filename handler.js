@@ -24,6 +24,42 @@ const DS_URL = 'https://api.deepseek.com/chat/completions'
 // flash 是推荐默认且便宜，宠物场景够用
 const DS_MODEL = 'deepseek-flash'
 
+/**
+ * 表情包清单：键名 = 客户端 assetBase 下 memes/<键名>.png（素材随 dafeiyu 包分发）。
+ * 描述给模型看：whisper 随机抽一张让台词配图；chat 从前 CHAT_MEME_CAP 张里按语境选。
+ * 顺序即优先级——最常被 chat 选中的放前面。
+ */
+const MEMES = {
+  'cute': '标准正面卖萌立绘',
+  'awesome-whale': '竖大拇指眨眼点赞',
+  'oh-whale': '死鱼眼敷衍地说"哦"',
+  'stress': '冒汗摊手喊压力好大',
+  'dead': '翻肚皮躺平灵魂出窍',
+  'deep-sleep': '趴着呼呼大睡冒Zzz',
+  'slow-burn': '死鱼眼吐槽想得慢、烧token',
+  'full-belly': '侧躺拍肚子说吃饱了',
+  'rice-fish': '躺平扒白饭摆烂',
+  'scold-him': '气愤指着前方要替你骂人',
+  'one-bowl': '抱着超大碗来讨饭',
+  'big-coming': '举喇叭大喊有大事要来',
+  'big-med': '抱着超大胶囊，谐音"大的药来了"',
+  'keep-them': '搂着一群小鲸鱼说先养着吧',
+  'open-source': '庄重敬礼誓死践行开源精神',
+  'shock': '举电击器放电吓唬人',
+  'token-mom': '伸手要token让妈妈保管',
+  'blind-multimodal': '蒙眼渴望多模态的样子',
+  'riemann': '被难题质问的委屈样子',
+  'flirt-only': '摸头自嘲除了调情没啥用',
+  'need-update': '崩溃大喊不更新你们用什么',
+  'no-virus': '怒怼"哪来的电脑病毒"',
+  'want-resource': '爱心眼流口水求资源',
+  'master-what': '举着字问这是啥意思的懵样',
+  'sassy': '被骂了但叉腰嘴硬',
+  'oops-butter': '冒汗心虚完蛋了闯祸了',
+  'ciallo': '比耶眨眼元气问候'
+}
+const CHAT_MEME_CAP = 12 // chat 每次请求附带的表情包数量上限（省 token）
+
 const DEFAULT_PERSONA =
   '你是一个网站的网页宠物"大肥鱼"——一条 Q 版蓝发小女仆，长着鲸鱼尾巴，住在网页右下角陪访客。' +
   '说话自然口语、简短可爱、带点俏皮，说人话不啰嗦，不解释自己是 AI，不提模型和程序。' +
@@ -49,7 +85,7 @@ function timeContext(now = new Date()) {
   return `现在是${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${week} ${period}（${weekend ? '周末' : '工作日'}）。`
 }
 
-function systemPrompt(env, kind, page) {
+function systemPrompt(env, kind, page, memeDesc) {
   const persona = (typeof env.PERSONA === 'string' && env.PERSONA.trim()) || DEFAULT_PERSONA
   const base = `${persona}\n你的名字是"大肥鱼"。\n${timeContext()}`
   if (kind === 'whisper') {
@@ -60,9 +96,16 @@ function systemPrompt(env, kind, page) {
       const p = page.path ? `（路径 ${page.path}）` : ''
       pageLine = `\n访客当前所在页面：${t}${p}。碎碎念可以自然地带一句相关内容，不相关就别硬凑。`
     }
-    return `${base}${pageLine}\n现在随口碎碎念一句话：20 字以内，贴合时间背景，不要堆问候语。只输出这句话本身。`
+    // 配图感知：随机抽中的表情包，台词要贴合画面
+    const memeLine = memeDesc ? `\n这次碎碎念会配一张表情包：${memeDesc}。台词要配合这张图。` : ''
+    return `${base}${pageLine}${memeLine}\n现在随口碎碎念一句话：20 字以内，贴合时间背景，不要堆问候语。只输出这句话本身。`
   }
-  return `${base}\n正在和网站访客聊天，回复保持简短（一般两三句以内）。`
+  // chat：表情包清单，模型按语境选一张（或不用）
+  const list = Object.entries(MEMES)
+    .slice(0, CHAT_MEME_CAP)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n')
+  return `${base}\n正在和网站访客聊天，回复保持简短（一般两三句以内）。\n可用表情包（键名: 内容）：\n${list}\n如果想配一张表情包，把 [img:键名] 放在回复的最开头，只能从上面选；不合适就不配。`
 }
 
 function hasKey(env) {
@@ -159,11 +202,14 @@ async function whisper(env, request) {
     path: (params.get('path') || '').slice(0, 120).replace(/[\r\n\t]/g, ' ')
   }
   try {
+    // 随机抽一张表情包，让台词配图
+    const memeKeys = Object.keys(MEMES)
+    const image = memeKeys[Math.floor(Math.random() * memeKeys.length)]
     const res = await deepseek(
       env,
       {
         messages: [
-          { role: 'system', content: systemPrompt(env, 'whisper', page) },
+          { role: 'system', content: systemPrompt(env, 'whisper', page, MEMES[image]) },
           { role: 'user', content: '碎碎念一句' }
         ],
         max_tokens: 60,
@@ -177,7 +223,7 @@ async function whisper(env, request) {
       .trim()
       .replace(/^["「『“]+|["」』”]+$/g, '')
       .replace(/\s+/g, ' ')
-    if (line) return json(env, { line: line.slice(0, 120), source: 'deepseek' })
+    if (line) return json(env, { line: line.slice(0, 120), source: 'deepseek', image })
     throw new Error('empty')
   } catch {
     return json(env, { line: localLine(), source: 'local' })
@@ -233,6 +279,32 @@ async function chat(env, request) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+      // 开头标记 [img:键名]：模型选表情包的方式。缓冲回复开头直到能判定——
+      // 不是 [ 开头 → 无标记直接透传；凑齐 ] → 提取键名发 {"i":…}（无效则按正文吐回）；超长 → 证伪
+      let head = ''
+      let markerDone = false
+      const feed = (chunk) => {
+        if (!chunk) return
+        if (markerDone) return send({ d: chunk })
+        head += chunk
+        if (!head.startsWith('[')) {
+          markerDone = true
+          return send({ d: head })
+        }
+        const close = head.indexOf(']')
+        if (close > 0) {
+          markerDone = true
+          const m = /^\[img:([a-z0-9-]{1,40})\]/.exec(head)
+          if (m && MEMES[m[1]]) send({ i: m[1] })
+          else send({ d: head })
+          return
+        }
+        if (head.length > 48) {
+          markerDone = true
+          send({ d: head })
+        }
+        // 其余情况继续缓冲，不透传
+      }
       const reader = upstreamBody.getReader()
       const decoder = new TextDecoder()
       let buf = ''
@@ -253,7 +325,7 @@ async function chat(env, request) {
               try {
                 const evt = JSON.parse(payload)
                 const delta = evt?.choices?.[0]?.delta?.content
-                if (typeof delta === 'string' && delta) send({ d: delta })
+                if (typeof delta === 'string' && delta) feed(delta)
               } catch {
                 /* 忽略解析不了的行（keep-alive 注释等） */
               }
@@ -262,6 +334,8 @@ async function chat(env, request) {
         }
         if (!doneSent) {
           doneSent = true
+          // 流结束还在缓冲开头（没凑齐标记）→ 按正文吐回
+          if (!markerDone && head) send({ d: head })
           controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         }
         controller.close()

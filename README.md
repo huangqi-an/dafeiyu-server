@@ -9,12 +9,13 @@
 | 端点 | 方法 | 说明 |
 |---|---|---|
 | `/` | GET | 自检：`{ name, ok, keyConfigured }` |
-| `/whisper` | GET | 一句碎碎念 → `{ line, source }`（`source`: `deepseek` \| `local`）。可选参数 `?title=&path=`：客户端把当前页面标题/路径带上，AI 能就着访客正在看的内容说话 |
+| `/whisper` | GET | 一句碎碎念 → `{ line, source, image? }`。`source`: `deepseek` \| `local`；`image` 为表情包键名（客户端在自己的 `assetBase/memes/` 下解析）。可选参数 `?title=&path=`：客户端把当前页面标题/路径带上，AI 能就着访客正在看的内容说话 |
 | `/chat` | POST | 流式对话：请求体 `{ messages: [{role, content}...] }`（最多 10 条、单条 ≤500 字），响应 SSE |
 
 SSE 事件流（与 dafeiyu 客户端约定）：
 
 ```
+data: {"i":"cute"}      ← 表情包键名（可选，通常在最前；模型按语境选图）
 data: {"d":"增量文本"}
 data: {"e":"错误信息"}
 data: [DONE]
@@ -79,6 +80,8 @@ wrangler deploy
 - **限流**：单实例内存计数——whisper 6 次/10 分钟/IP、chat 20 次/10 分钟/IP、全局 1000 次/天封顶费用。
   Serverless（Workers/Vercel）实例是弹性的，跨实例不保证，介意的话在网关层再加；
   或者把 `ALLOW_ORIGIN` 锁成自己的域名，配合各平台的 WAF 规则
+- **表情包**：27 张（随 dafeiyu 客户端分发）。whisper 随机抽一张并让台词配合画面；
+  chat 把前 12 张的清单交给模型按语境选（模型在回复开头输出 `[img:键名]`，服务端解析成 `{"i":…}` 事件并剥掉标记）
 - **降级**：未配 key / 上游失败 / 超限时，whisper 返回本地台词（宠物不断话），chat 返回明确错误由前端转成气泡提示
 
 ## License
