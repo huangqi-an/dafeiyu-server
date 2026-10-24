@@ -49,11 +49,18 @@ function timeContext(now = new Date()) {
   return `现在是${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${week} ${period}（${weekend ? '周末' : '工作日'}）。`
 }
 
-function systemPrompt(env, kind) {
+function systemPrompt(env, kind, page) {
   const persona = (typeof env.PERSONA === 'string' && env.PERSONA.trim()) || DEFAULT_PERSONA
   const base = `${persona}\n你的名字是"大肥鱼"。\n${timeContext()}`
   if (kind === 'whisper') {
-    return `${base}\n现在随口碎碎念一句话：20 字以内，贴合时间背景，不要堆问候语。只输出这句话本身。`
+    // 页面感知：客户端带 title/path 参数时注入，AI 能就着访客正在看的内容说话
+    let pageLine = ''
+    if (page && (page.title || page.path)) {
+      const t = page.title ? `《${page.title}》` : ''
+      const p = page.path ? `（路径 ${page.path}）` : ''
+      pageLine = `\n访客当前所在页面：${t}${p}。碎碎念可以自然地带一句相关内容，不相关就别硬凑。`
+    }
+    return `${base}${pageLine}\n现在随口碎碎念一句话：20 字以内，贴合时间背景，不要堆问候语。只输出这句话本身。`
   }
   return `${base}\n正在和网站访客聊天，回复保持简短（一般两三句以内）。`
 }
@@ -145,12 +152,18 @@ async function whisper(env, request) {
   // 超限也回 200 + 本地台词：不再打 DeepSeek，但宠物照常说得上话
   if (!rateAllow(ip, 'whisper', 6, 10 * 60_000)) return json(env, { line: localLine(), source: 'local' })
   if (!hasKey(env)) return json(env, { line: localLine(), source: 'local' })
+  // 页面感知参数：?title=...&path=...（长度截断，只作提示词素材）
+  const params = new URL(request.url).searchParams
+  const page = {
+    title: (params.get('title') || '').slice(0, 60).replace(/[\r\n\t]/g, ' '),
+    path: (params.get('path') || '').slice(0, 120).replace(/[\r\n\t]/g, ' ')
+  }
   try {
     const res = await deepseek(
       env,
       {
         messages: [
-          { role: 'system', content: systemPrompt(env, 'whisper') },
+          { role: 'system', content: systemPrompt(env, 'whisper', page) },
           { role: 'user', content: '碎碎念一句' }
         ],
         max_tokens: 60,

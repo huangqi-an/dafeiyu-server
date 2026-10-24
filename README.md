@@ -9,7 +9,7 @@
 | 端点 | 方法 | 说明 |
 |---|---|---|
 | `/` | GET | 自检：`{ name, ok, keyConfigured }` |
-| `/whisper` | GET | 一句碎碎念 → `{ line, source }`（`source`: `deepseek` \| `local`） |
+| `/whisper` | GET | 一句碎碎念 → `{ line, source }`（`source`: `deepseek` \| `local`）。可选参数 `?title=&path=`：客户端把当前页面标题/路径带上，AI 能就着访客正在看的内容说话 |
 | `/chat` | POST | 流式对话：请求体 `{ messages: [{role, content}...] }`（最多 10 条、单条 ≤500 字），响应 SSE |
 
 SSE 事件流（与 dafeiyu 客户端约定）：
