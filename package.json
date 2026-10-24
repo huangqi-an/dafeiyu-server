@@ -1,0 +1,28 @@
+{
+  "name": "dafeiyu-server",
+  "version": "0.1.0",
+  "description": "大肥鱼网页宠物的自建后端——零依赖单文件，DeepSeek 碎碎念/聊天 SSE，可部署到 Node / Cloudflare Workers / Vercel / Deno",
+  "type": "module",
+  "license": "MIT",
+  "main": "./handler.js",
+  "exports": {
+    ".": "./handler.js"
+  },
+  "scripts": {
+    "start": "node node.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huangqi-an/dafeiyu-server.git"
+  },
+  "keywords": [
+    "dafeiyu",
+    "web-pet",
+    "deepseek",
+    "sse",
+    "serverless"
+  ]
+}

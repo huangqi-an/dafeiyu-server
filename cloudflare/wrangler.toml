@@ -1,0 +1,10 @@
+name = "dafeiyu-server"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# DEEPSEEK_API_KEY 不要写在这里（会入库）：
+#   wrangler secret put DEEPSEEK_API_KEY
+# 人设和 CORS 来源是普通变量，可以写：
+[vars]
+# PERSONA = "你是……（自定义人设正文）"
+# ALLOW_ORIGIN = "https://你的站点/"
